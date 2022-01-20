@@ -115,27 +115,6 @@ namespace Wordle
             return _cache[lastGuess + lastResult];
         }
 
-        private static void DoWordGame(string chosenWord, List<string> validWords, List<string> guessWords)
-        {
-            Console.WriteLine("Chosen Word: " + chosenWord);
-            Console.WriteLine("Guess: TARES");
-            var result = EvaluateGuess(chosenWord, "TARES");
-            Console.WriteLine(result);
-            Console.WriteLine();
-
-            string nextGuess = "TARES";
-            while (result != "22222")
-            {
-                validWords = TrimValidWords(validWords, nextGuess, result);
-
-                nextGuess = GetBestGuess(validWords, guessWords);
-                Console.WriteLine("Guess: " + nextGuess);
-                result = EvaluateGuess(chosenWord, nextGuess);
-                Console.WriteLine(result);
-                Console.WriteLine();
-            }
-        }
-
         private static string GetBestGuess(List<string> validWords, List<string> guessWords)
         {
             if (validWords.Count == 1)

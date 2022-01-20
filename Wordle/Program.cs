@@ -11,13 +11,13 @@ namespace Wordle
         private static string _wordleWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleWords.txt";
         private static string _wordleGuessWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleGuessList.txt";
         private static string _firstGuess = "";
-        private static string _outputFileName = "WordleWordSequences.csv";
+        private static string _outputFileName = "WordleWordSequences(StdDev-OnlyValidGuesses).csv";
 
         static void Main(string[] args)
         {
             var validWords = ReadWordsFromSingleLineFile(_wordleWordsPath);
-            var guessWords = ReadWordsFromSingleLineFile(_wordleGuessWordsPath);
-            // var guessWords = new List<string>(validWords);
+            // var guessWords = ReadWordsFromSingleLineFile(_wordleGuessWordsPath);
+            var guessWords = new List<string>(validWords);
 
             _firstGuess = GetBestGuess(validWords, guessWords);
             ScanAllWords(validWords, guessWords);
@@ -173,16 +173,17 @@ namespace Wordle
                 dictionary[results]++;
             }
 
-            // return ScoreWithStandardDev(dictionary);
+            return ScoreWithStandardDev(dictionary);
             // return ScoreWithMeanSquares(dictionary);
-            return ScoreWithLowestEntropy(dictionary, validWords.Count);
+            // return ScoreWithLowestEntropy(dictionary, validWords.Count);
         }
 
         private static double ScoreWithStandardDev(Dictionary<string, int> resultBuckets)
         {
-            var average = resultBuckets.Values.Average();
+
+            var average = resultBuckets.Values.Sum() / 243;
             var sum = resultBuckets.Values.Sum(d => Math.Pow(d - average, 2));
-            var standardDev = Math.Sqrt(sum / (resultBuckets.Count - 1));
+            var standardDev = Math.Sqrt(sum / 242);
             return -standardDev;
         }
 

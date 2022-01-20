@@ -10,8 +10,8 @@ namespace Wordle
     {
         private static string _wordleWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleWords.txt";
         private static string _wordleGuessWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleGuessList.txt";
-        private static string _firstGuess = "soare";
-        private static string _outputFileName = "WordleWordSequences(MeanSquares-OnlyValidGuess).csv";
+        private static string _firstGuess = "";
+        private static string _outputFileName = "WordleWordSequences.csv";
 
         static void Main(string[] args)
         {
@@ -173,8 +173,17 @@ namespace Wordle
                 dictionary[results]++;
             }
 
-            return ScoreWithMeanSquares(dictionary);
-            // return ScoreWithLowestEntropy(dictionary, validWords.Count);
+            // return ScoreWithStandardDev(dictionary);
+            // return ScoreWithMeanSquares(dictionary);
+            return ScoreWithLowestEntropy(dictionary, validWords.Count);
+        }
+
+        private static double ScoreWithStandardDev(Dictionary<string, int> resultBuckets)
+        {
+            var average = resultBuckets.Values.Average();
+            var sum = resultBuckets.Values.Sum(d => Math.Pow(d - average, 2));
+            var standardDev = Math.Sqrt(sum / (resultBuckets.Count - 1));
+            return -standardDev;
         }
 
         private static double ScoreWithMeanSquares(Dictionary<string, int> resultBuckets)

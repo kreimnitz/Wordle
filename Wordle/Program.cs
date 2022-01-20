@@ -11,12 +11,13 @@ namespace Wordle
         private static string _wordleWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleWords.txt";
         private static string _wordleGuessWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleGuessList.txt";
         private static string _firstGuess = "soare";
-        private static string _outputFileName = "WordleWordSequences(MeanSquares).csv";
+        private static string _outputFileName = "WordleWordSequences(MeanSquares-OnlyValidGuess).csv";
 
         static void Main(string[] args)
         {
             var validWords = ReadWordsFromSingleLineFile(_wordleWordsPath);
             var guessWords = ReadWordsFromSingleLineFile(_wordleGuessWordsPath);
+            // var guessWords = new List<string>(validWords);
 
             _firstGuess = GetBestGuess(validWords, guessWords);
             ScanAllWords(validWords, guessWords);

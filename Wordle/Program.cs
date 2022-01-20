@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 
@@ -10,15 +11,15 @@ namespace Wordle
         private static string _wordleWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleWords.txt";
         private static string _wordleGuessWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleGuessList.txt";
         private static string _firstGuess = "soare";
+        private static string _outputFileName = "WordleWordSequences(MeanSquares).csv";
 
         static void Main(string[] args)
         {
             var validWords = ReadWordsFromSingleLineFile(_wordleWordsPath);
             var guessWords = ReadWordsFromSingleLineFile(_wordleGuessWordsPath);
 
+            _firstGuess = GetBestGuess(validWords, guessWords);
             ScanAllWords(validWords, guessWords);
-
-            Console.ReadLine();
         }
 
         private static List<string> ReadCSW19()
@@ -47,19 +48,26 @@ namespace Wordle
 
         private static void ScanAllWords(List<string> validWords, List<string> guessWords)
         {
+            int count = 0;
             var allGameResults = new List<(string ChosenWord, List<(string GuessWord, string Result, int Size)> AnswerSequence)>();
             foreach (var word in validWords)
             {
                 var gameResults = PlayGame(word, validWords, guessWords);
                 allGameResults.Add((word, gameResults));
                 WriteToFile(word, gameResults);
-                Console.WriteLine(word + " done");
+                var percentage = (((double)count++) / validWords.Count).ToString("P", CultureInfo.CurrentCulture);
+                Console.WriteLine(word + " " + percentage + " done");
             }
         }
 
         private static void WriteToFile(string chosenWord, List<(string GuessWord, string Result, int Size)> answerSequence)
         {
-            using (var file = File.AppendText("WordleWordSequences(FullGuess).csv"))
+            if (!File.Exists(_outputFileName))
+            {
+                File.Create(_outputFileName).Dispose();
+            }
+
+            using (var file = File.AppendText(_outputFileName))
             {
                 file.Write(chosenWord);
                 file.Write("," + answerSequence.Count);
@@ -123,7 +131,7 @@ namespace Wordle
             }
 
             var maxWord = "";
-            double maxScore = 0;
+            double maxScore = double.NegativeInfinity;
             foreach (var guessWord in guessWords)
             {
                 var score = ScoreGuess(validWords, guessWord);
@@ -164,10 +172,27 @@ namespace Wordle
                 dictionary[results]++;
             }
 
+            return ScoreWithMeanSquares(dictionary);
+            // return ScoreWithLowestEntropy(dictionary, validWords.Count);
+        }
+
+        private static double ScoreWithMeanSquares(Dictionary<string, int> resultBuckets)
+        {
             double total = 0;
-            foreach (var entry in dictionary)
+            foreach (var entry in resultBuckets)
             {
-                var probability = ((double) entry.Value) / validWords.Count;
+                total += Math.Pow(entry.Value, 2);
+            }
+
+            return -(total / resultBuckets.Count);
+        }
+
+        private static double ScoreWithLowestEntropy(Dictionary<string, int> resultBuckets, int possibleWordCount)
+        {
+            double total = 0;
+            foreach (var entry in resultBuckets)
+            {
+                var probability = ((double)entry.Value) / possibleWordCount;
                 var score = (-1) * probability * Math.Log2(probability);
                 total += score;
             }

@@ -1,49 +1,118 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace Wordle
 {
     class Program
     {
+        private static string _wordleWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleWords.txt";
+        private static string _wordleGuessWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleGuessList.txt";
+        private static string _firstGuess = "soare";
+
         static void Main(string[] args)
         {
+            var validWords = ReadWordsFromSingleLineFile(_wordleWordsPath);
+            var guessWords = ReadWordsFromSingleLineFile(_wordleGuessWordsPath);
+
+            ScanAllWords(validWords, guessWords);
+
+            Console.ReadLine();
+        }
+
+        private static List<string> ReadCSW19()
+        {
             var validWords = new List<string>();
-            var guessWords = new List<string>();
             foreach (var word in File.ReadLines(@"C:\Users\kevin\OneDrive\Desktop\csw19.txt"))
             {
                 if (word.Length == 5)
                 {
                     validWords.Add(word);
-                    guessWords.Add(word);
                 }
             }
+            return validWords;
+        }
 
-            Console.WriteLine("Valid Words: " + validWords.Count);
+        private static List<string> ReadWordsFromSingleLineFile(string path)
+        {
+            var line = File.ReadAllText(path);
 
-            var rand = new Random();
-            var index = rand.Next(validWords.Count);
-            var chosenWord = validWords[index];
+            var words = line.Split("\",\"");
+            words[0] = words[0].Substring(1);
+            words[words.Length -1] = words[words.Length - 1].Substring(0, 5);
 
-            Console.WriteLine("Chosen Word: " + chosenWord);
-            Console.WriteLine("Guess: TARES");
-            var result = EvaluateGuess(chosenWord, "TARES");
-            Console.WriteLine(result);
-            Console.WriteLine();
+            return words.ToList();
+        }
 
-            string nextGuess = "TARES";
-            while (result != "22222")
+        private static void ScanAllWords(List<string> validWords, List<string> guessWords)
+        {
+            var allGameResults = new List<(string ChosenWord, List<(string GuessWord, string Result, int Size)> AnswerSequence)>();
+            foreach (var word in validWords)
             {
-                validWords = TrimValidWords(validWords, nextGuess, result);
+                var gameResults = PlayGame(word, validWords, guessWords);
+                allGameResults.Add((word, gameResults));
+                WriteToFile(word, gameResults);
+                Console.WriteLine(word + " done");
+            }
+        }
 
-                nextGuess = GetBestGuess(validWords, guessWords);
-                Console.WriteLine("Guess: " + nextGuess);
-                result = EvaluateGuess(chosenWord, nextGuess);
-                Console.WriteLine(result);
-                Console.WriteLine();
+        private static void WriteToFile(string chosenWord, List<(string GuessWord, string Result, int Size)> answerSequence)
+        {
+            using (var file = File.AppendText("WordleWordSequences(FullGuess).csv"))
+            {
+                file.Write(chosenWord);
+                file.Write("," + answerSequence.Count);
+                foreach (var guess in answerSequence)
+                {
+                    file.Write("," + guess.GuessWord + " " + guess.Result);
+                }
+                file.WriteLine();
+            }
+        }
+
+        private static List<(string GuessWord, string Result, int size)> PlayGame(string chosenWord, List<string> validWordsIn, List<string> guessWordsIn)
+        {
+            var firstGuess = _firstGuess;
+            if (chosenWord == firstGuess)
+            {
+                return new List<(string, string, int)> { (firstGuess, "22222", 1) };
             }
 
-            Console.ReadLine();
+            var possibleWords = new List<string>(validWordsIn);
+            var guessWords = new List<string>(guessWordsIn);
+            
+            var guesses = new List<(string, string, int)>();
+            var result = EvaluateGuess(chosenWord, firstGuess);
+            possibleWords = TrimValidWords(possibleWords, firstGuess, result);
+            guesses.Add((firstGuess, result, possibleWords.Count));
+
+            var nextGuess = CheckCacheForNextGuess(firstGuess, result, possibleWords, guessWords);
+            result = EvaluateGuess(chosenWord, nextGuess);
+            while (result != "22222")
+            {
+                possibleWords = TrimValidWords(possibleWords, nextGuess, result);
+                guesses.Add((nextGuess, result, possibleWords.Count));
+
+                nextGuess = GetBestGuess(possibleWords, guessWords);
+                result = EvaluateGuess(chosenWord, nextGuess);
+            }
+            guesses.Add((nextGuess, result, 1));
+
+            return guesses;
+        }
+
+        private static Dictionary<string, string> _cache = new Dictionary<string, string>();
+
+        private static string CheckCacheForNextGuess(string lastGuess, string lastResult, List<string> possibleWords, List<string> guessWords)
+        {
+            if (!_cache.ContainsKey(lastGuess + lastResult))
+            {
+                var nextGuess = GetBestGuess(possibleWords, guessWords);
+                _cache.Add(lastGuess + lastResult, nextGuess);
+            }
+
+            return _cache[lastGuess + lastResult];
         }
 
         private static void DoWordGame(string chosenWord, List<string> validWords, List<string> guessWords)

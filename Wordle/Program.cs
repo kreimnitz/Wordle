@@ -191,6 +191,8 @@ namespace Wordle
             {
                 var probability = ((double)resultCounts[result]) / validWords.Count;
                 var validWordsAfterFirstGuess = GetNewValidWords(validWords, guessWord, result);
+
+                // need to refactor GetBestGuess to not loop with this to use this score method
                 var secondGuess = GetBestGuess(validWordsAfterFirstGuess, validWordsAfterFirstGuess);
                 var buckets = GetResultBuckets(validWordsAfterFirstGuess, secondGuess);
                 var expectedRemainingAfterSecondGuess = ScoreWithExpectedRemainingWords(buckets, validWordsAfterFirstGuess.Count);

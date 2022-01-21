@@ -11,15 +11,15 @@ namespace Wordle
         private static string _wordleWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleWords.txt";
         private static string _wordleGuessWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleGuessList.txt";
         private static string _firstGuess = "";
-        private static string _outputFileName = "WordleWordSequences(StdDev-OnlyValidGuesses).csv";
+        private static string _outputFileName = "WordleWordSequences(Entropy-FullGuess-2opt).csv";
+        private static Func<List<string>, string, double> _scoreFunc = ScoreGuess;
 
         static void Main(string[] args)
         {
             var validWords = ReadWordsFromSingleLineFile(_wordleWordsPath);
-            // var guessWords = ReadWordsFromSingleLineFile(_wordleGuessWordsPath);
-            var guessWords = new List<string>(validWords);
+            var guessWords = ReadWordsFromSingleLineFile(_wordleGuessWordsPath).Union(validWords).ToList();
 
-            _firstGuess = GetBestGuess(validWords, guessWords);
+            _firstGuess = GetBestGuess(validWords, guessWords, ScoreGuess);
             ScanAllWords(validWords, guessWords);
         }
 
@@ -93,17 +93,17 @@ namespace Wordle
             
             var guesses = new List<(string, string, int)>();
             var result = EvaluateGuess(chosenWord, firstGuess);
-            possibleWords = TrimValidWords(possibleWords, firstGuess, result);
+            possibleWords = GetNewValidWords(possibleWords, firstGuess, result);
             guesses.Add((firstGuess, result, possibleWords.Count));
 
             var nextGuess = CheckCacheForNextGuess(firstGuess, result, possibleWords, guessWords);
             result = EvaluateGuess(chosenWord, nextGuess);
             while (result != "22222")
             {
-                possibleWords = TrimValidWords(possibleWords, nextGuess, result);
+                possibleWords = GetNewValidWords(possibleWords, nextGuess, result);
                 guesses.Add((nextGuess, result, possibleWords.Count));
 
-                nextGuess = GetBestGuess(possibleWords, guessWords);
+                nextGuess = GetBestGuess(possibleWords, guessWords, ScoreGuess);
                 result = EvaluateGuess(chosenWord, nextGuess);
             }
             guesses.Add((nextGuess, result, 1));
@@ -117,25 +117,32 @@ namespace Wordle
         {
             if (!_cache.ContainsKey(lastGuess + lastResult))
             {
-                var nextGuess = GetBestGuess(possibleWords, guessWords);
+                var nextGuess = GetBestGuess(possibleWords, guessWords, _scoreFunc);
                 _cache.Add(lastGuess + lastResult, nextGuess);
             }
 
             return _cache[lastGuess + lastResult];
         }
 
-        private static string GetBestGuess(List<string> validWords, List<string> guessWords)
+        private static string GetBestGuess(List<string> validWords, List<string> guessWords, Func<List<string>, string, double> scoreFunc)
         {
-            if (validWords.Count == 1)
+            if (validWords.Count == 1 || validWords.Count == 2)
             {
                 return validWords[0];
             }
 
             var maxWord = "";
             double maxScore = double.NegativeInfinity;
+            double count = 0;
+            var allScores = new Dictionary<string, double>();
             foreach (var guessWord in guessWords)
             {
-                var score = ScoreGuess(validWords, guessWord);
+                if (scoreFunc == ScoreWithDoubleGuess)
+                {
+                    Console.Write($"\r{(count++ / guessWords.Count).ToString("P")}   ");
+                }
+                var score = scoreFunc(validWords, guessWord);
+                allScores.Add(guessWord, score);
                 if (score > maxScore)
                 {
                     maxScore = score;
@@ -146,7 +153,7 @@ namespace Wordle
             return maxWord;
         }
 
-        private static List<string> TrimValidWords(List<string> validWords, string guessWord, string guessResult)
+        private static List<string> GetNewValidWords(List<string> validWords, string guessWord, string guessResult)
         {
             var newList = new List<string>();
             foreach (var word in validWords)
@@ -160,7 +167,7 @@ namespace Wordle
             return newList;
         }
 
-        private static double ScoreGuess(List<string> validWords, string guessWord)
+        private static Dictionary<string, int> GetResultBuckets(List<string> validWords, string guessWord)
         {
             var dictionary = new Dictionary<string, int>();
             foreach (var answerWord in validWords)
@@ -172,15 +179,44 @@ namespace Wordle
                 }
                 dictionary[results]++;
             }
+            return dictionary;
+        }
 
-            return ScoreWithStandardDev(dictionary);
-            // return ScoreWithMeanSquares(dictionary);
-            // return ScoreWithLowestEntropy(dictionary, validWords.Count);
+        private static double ScoreGuess(List<string> validWords, string guessWord)
+        {
+            var dictionary = GetResultBuckets(validWords, guessWord);
+            return ScoreWithLowestEntropy(dictionary, validWords.Count);
+        }
+
+        private static double ScoreWithDoubleGuess(List<string> validWords, string guessWord)
+        {
+            double expectedRemainingWords = 0;
+            var resultCounts = GetResultBuckets(validWords, guessWord);
+            foreach (var result in resultCounts.Keys)
+            {
+                var probability = ((double)resultCounts[result]) / validWords.Count;
+                var validWordsAfterFirstGuess = GetNewValidWords(validWords, guessWord, result);
+                var secondGuess = GetBestGuess(validWordsAfterFirstGuess, validWordsAfterFirstGuess, ScoreGuess);
+                var buckets = GetResultBuckets(validWordsAfterFirstGuess, secondGuess);
+                var expectedRemainingAfterSecondGuess = ScoreWithExpectedRemainingWords(buckets, validWordsAfterFirstGuess.Count);
+                expectedRemainingWords += expectedRemainingAfterSecondGuess * probability;
+            }
+            return expectedRemainingWords;
+        }
+
+        private static double ScoreWithExpectedRemainingWords(Dictionary<string, int> resultBuckets, int possibleWordCount)
+        {
+            double total = 0;
+            foreach (var entry in resultBuckets)
+            {
+                var probability = ((double)entry.Value) / possibleWordCount;
+                total += probability * entry.Value;
+            }
+            return -total;
         }
 
         private static double ScoreWithStandardDev(Dictionary<string, int> resultBuckets)
         {
-
             var average = resultBuckets.Values.Sum() / 243;
             var sum = resultBuckets.Values.Sum(d => Math.Pow(d - average, 2));
             var standardDev = Math.Sqrt(sum / 242);
@@ -210,8 +246,15 @@ namespace Wordle
             return total;
         }
 
+
+        private static Dictionary<string, string> _evaluateCache = new Dictionary<string, string>();
         private static string EvaluateGuess(string chosenWord, string guess)
         {
+            if (_evaluateCache.ContainsKey(chosenWord + guess))
+            {
+                return _evaluateCache[chosenWord + guess];
+            }
+
             var usedResultLetterCounts = new Dictionary<char, int>();
             var chosenWordLetterCounts = new Dictionary<char, int>();
             for (int i = 0; i < 5; i++)
@@ -250,7 +293,9 @@ namespace Wordle
                 }
             }
 
-            return $"{results[0]}{results[1]}{results[2]}{results[3]}{results[4]}";
+            var result = $"{results[0]}{results[1]}{results[2]}{results[3]}{results[4]}";
+            _evaluateCache[chosenWord + guess] = result;
+            return result;
         }
     }
 }

@@ -10,11 +10,8 @@ namespace Wordle
     {
         private static string _wordleWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleWords.txt";
         private static string _wordleGuessWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleGuessList.txt";
-        private static string _firstGuess = "";
-        private static string _outputFileName = "WordleWordSequences(Entropy-FullGuess-2opt).csv";
-
-        private static string _inputDecisionTreeName = "WordleWordSequences(NoStats).csv";
-        private static string _outputDecisionTreeName = "DesicionTree5.md";
+        private static string _outputFileName = "WordleWordSequences(Entropy-FullGuess-Opt).csv";
+        private static string _outputDecisionTreeName = "DesicionTree.md";
 
         private static Func<List<string>, string, double> _scoreFunc = ScoreGuess;
 
@@ -23,26 +20,10 @@ namespace Wordle
             var validWords = ReadWordsFromSingleLineFile(_wordleWordsPath);
             var guessWords = ReadWordsFromSingleLineFile(_wordleGuessWordsPath).Union(validWords).ToList();
 
-            var map = new Dictionary<int, List<(string, List<string>)>>();
-            foreach (var chosenWord in validWords)
-            {
-                var result = EvaluateGuess(chosenWord, "dream");
-                var possibleWords = GetNewValidWords(validWords, "dream", result);
+            var firstGuess = GetBestGuess(validWords, guessWords, ScoreGuess);
+            ScanAllWords(firstGuess, validWords, guessWords);
 
-                result = EvaluateGuess(chosenWord, "ploys");
-                possibleWords = GetNewValidWords(possibleWords, "ploys", result);
-
-                result = EvaluateGuess(chosenWord, "thing");
-                possibleWords = GetNewValidWords(possibleWords, "thing", result);
-
-                if (!map.ContainsKey(possibleWords.Count))
-                {
-                    map[possibleWords.Count] = new List<(string, List<string>)>();
-                }
-                map[possibleWords.Count].Add((chosenWord, possibleWords));
-            }
-
-            Console.ReadLine();
+            BuildDecisionTree(_outputFileName, _outputDecisionTreeName);
         }
 
         private static List<string> ReadCSW19()
@@ -69,13 +50,13 @@ namespace Wordle
             return words.ToList();
         }
 
-        private static void ScanAllWords(List<string> validWords, List<string> guessWords)
+        private static void ScanAllWords(string firstGuess, List<string> validWords, List<string> guessWords)
         {
             int count = 0;
             var allGameResults = new List<(string ChosenWord, List<(string GuessWord, string Result, int Size)> AnswerSequence)>();
             foreach (var word in validWords)
             {
-                var gameResults = PlayGame(word, validWords, guessWords);
+                var gameResults = PlayGame(firstGuess, word, validWords, guessWords);
                 allGameResults.Add((word, gameResults));
                 WriteToFile(word, gameResults);
                 var percentage = (((double)count++) / validWords.Count).ToString("P", CultureInfo.CurrentCulture);
@@ -102,9 +83,8 @@ namespace Wordle
             }
         }
 
-        private static List<(string GuessWord, string Result, int size)> PlayGame(string chosenWord, List<string> validWordsIn, List<string> guessWordsIn)
+        private static List<(string GuessWord, string Result, int size)> PlayGame(string firstGuess, string chosenWord, List<string> validWordsIn, List<string> guessWordsIn)
         {
-            var firstGuess = _firstGuess;
             if (chosenWord == firstGuess)
             {
                 return new List<(string, string, int)> { (firstGuess, "22222", 1) };
@@ -165,7 +145,7 @@ namespace Wordle
                 }
                 var score = scoreFunc(validWords, guessWord);
                 allScores.Add(guessWord, score);
-                if (score > maxScore)
+                if (score > maxScore || score == maxScore && validWords.Contains(guessWord))
                 {
                     maxScore = score;
                     maxWord = guessWord;

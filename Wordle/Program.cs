@@ -12,6 +12,10 @@ namespace Wordle
         private static string _wordleGuessWordsPath = @"C:\Users\kevin\source\repos\Wordle\Wordle\bin\Debug\net5.0\WordleGuessList.txt";
         private static string _firstGuess = "";
         private static string _outputFileName = "WordleWordSequences(Entropy-FullGuess-2opt).csv";
+
+        private static string _inputDecisionTreeName = "WordleWordSequences(NoStats).csv";
+        private static string _outputDecisionTreeName = "DesicionTree5.md";
+
         private static Func<List<string>, string, double> _scoreFunc = ScoreGuess;
 
         static void Main(string[] args)
@@ -19,8 +23,26 @@ namespace Wordle
             var validWords = ReadWordsFromSingleLineFile(_wordleWordsPath);
             var guessWords = ReadWordsFromSingleLineFile(_wordleGuessWordsPath).Union(validWords).ToList();
 
-            _firstGuess = GetBestGuess(validWords, guessWords, ScoreGuess);
-            ScanAllWords(validWords, guessWords);
+            var map = new Dictionary<int, List<(string, List<string>)>>();
+            foreach (var chosenWord in validWords)
+            {
+                var result = EvaluateGuess(chosenWord, "dream");
+                var possibleWords = GetNewValidWords(validWords, "dream", result);
+
+                result = EvaluateGuess(chosenWord, "ploys");
+                possibleWords = GetNewValidWords(possibleWords, "ploys", result);
+
+                result = EvaluateGuess(chosenWord, "thing");
+                possibleWords = GetNewValidWords(possibleWords, "thing", result);
+
+                if (!map.ContainsKey(possibleWords.Count))
+                {
+                    map[possibleWords.Count] = new List<(string, List<string>)>();
+                }
+                map[possibleWords.Count].Add((chosenWord, possibleWords));
+            }
+
+            Console.ReadLine();
         }
 
         private static List<string> ReadCSW19()
@@ -296,6 +318,107 @@ namespace Wordle
             var result = $"{results[0]}{results[1]}{results[2]}{results[3]}{results[4]}";
             _evaluateCache[chosenWord + guess] = result;
             return result;
+        }
+
+        private static void BuildDecisionTree(string fileIn, string fileOut)
+        {
+            var root = new WordleNode();
+            foreach (var line in File.ReadLines(fileIn))
+            {
+                var splitLine = line.Split(",");
+                root.AddSequence(splitLine.Skip(2));
+            }
+
+            if (!File.Exists(fileOut))
+            {
+                File.Create(fileOut).Dispose();
+            }
+
+            using (var file = File.AppendText(fileOut))
+            {
+                foreach (var line in root.ToMarkDownLines(0))
+                {
+                    file.WriteLine(line);
+                }
+            }
+        }
+
+        public class WordleNode
+        {
+            public string PreviousClue { get; set; }
+
+            public string Word { get; set; }
+
+            public Dictionary<string, WordleNode> Children { get; set; } = new Dictionary<string, WordleNode>();
+
+            public void AddSequence(IEnumerable<string> sequence)
+            {
+                var currentNode = this;
+                foreach (var step in sequence)
+                {
+                    var splitStep = step.Split(" ");
+                    var clue = splitStep[1];
+                    if (currentNode.Word is null)
+                    {
+                        currentNode.Word = splitStep[0];
+                    }
+
+                    if (splitStep[1].Equals("22222"))
+                    {
+                        break;
+                    }
+
+                    WordleNode nextNode;
+                    if (!currentNode.Children.TryGetValue(clue, out nextNode))
+                    {
+                        nextNode = new WordleNode();
+                        nextNode.PreviousClue = clue;
+                        currentNode.Children.Add(clue, nextNode);
+                    }
+                    currentNode = nextNode;
+                }
+            }
+
+            public List<string> ToMarkDownLines(int depth)
+            {
+                var lines = new List<string>();
+                if (depth == 0)
+                {
+                    lines.Add(Word);
+                    foreach (var child in Children.Values.OrderBy(n => n.PreviousClue))
+                    {
+                        foreach (var line in child.ToMarkDownLines(depth + 1))
+                        {
+                            lines.Add(line);
+                        }
+                    }
+                    return lines;
+                }
+
+                var padding = new string(' ', (depth - 1) * 2);
+                if (Children.Any())
+                {
+                    lines.Add($"{padding}<details>");
+                    lines.Add($"{padding}  <summary>{PreviousClue} {Word}</summary>");
+                    lines.Add($"{padding}  <blockquote>");
+                    foreach (var child in Children.Values.OrderBy(n => n.PreviousClue))
+                    {
+                        foreach (var line in child.ToMarkDownLines(depth + 2))
+                        {
+                            lines.Add(line);
+                        }
+                    }
+                    lines.Add($"{padding}  </blockquote>");
+                    lines.Add($"{padding}</details>");
+                }
+                else
+                {
+                    lines.Add($"{padding}{PreviousClue} {Word}");
+                    lines.Add($"<br/>");
+                }
+
+                return lines;
+            }
         }
     }
 }
